@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>磁盘清理助手</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" integrity="sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #0B1220;
+    --bg-soft: #0F182B;
+    --panel: #131D31;
+    --panel-2: #16223A;
+    --border: #223152;
+    --border-soft: #1A2744;
+    --fg: #E6EDF7;
+    --fg-dim: #8FA3BF;
+    --fg-faint: #5C6F8F;
+    --teal: #2DD4BF;
+    --teal-dim: #1E9E90;
+    --blue: #4C8DFF;
+    --amber: #F5A623;
+    --red: #F05252;
+    --green: #3ECF8E;
+    --mono: "Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    background: radial-gradient(1200px 600px at 70% -10%, #14213D 0%, var(--bg) 55%);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  /* 桌面工具：窄于此宽度整体横向滚动，不重排 */
+  .app { min-width: 1100px; max-width: 1560px; margin: 0 auto; padding: 18px 20px 28px; }
+
+  /* ===== 顶栏 ===== */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 4px 2px 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .logo {
+    width: 42px; height: 42px; border-radius: 11px;
+    background: linear-gradient(140deg, #123B45 0%, #0E2A4A 100%);
+    border: 1px solid var(--border);
+    display: grid; place-items: center;
+  }
+  .brand h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.3px; }
+  .brand .sub { font-size: 12px; color: var(--fg-dim); margin-top: 2px; }
+  .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .path-pill {
+    font-family: var(--mono); font-size: 12.5px; color: var(--teal);
+    background: var(--panel); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 999px; max-width: 340px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .path-pill.empty { color: var(--fg-faint); }
+
+  .mode-switch {
+    display: inline-flex; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 9px; padding: 3px; gap: 2px;
+  }
+  .mode-switch button {
+    font-family: var(--sans); font-size: 12.5px; color: var(--fg-dim);
+    background: transparent; border: none; padding: 6px 12px; border-radius: 7px;
+    cursor: pointer; transition: all .15s ease;
+  }
+  .mode-switch button.active { background: var(--panel-2); color: var(--fg); }
+  .mode-switch button.active[data-mode="fast"] { color: var(--teal); }
+  .mode-switch button.active[data-mode="standard"] { color: var(--blue); }
+  .mode-switch button.active[data-mode="deep"] { color: var(--amber); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--sans); font-size: 13.5px; font-weight: 600;
+    border: 1px solid transparent; border-radius: 9px;
+    padding: 9px 16px; cursor: pointer; transition: all .15s ease;
+    color: var(--fg);
+  }
+  .btn svg { width: 15px; height: 15px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--teal); color: #07231F; }
+  .btn-primary:hover:not(:disabled) { background: #3BE0CC; }
+  .btn-ghost { background: var(--panel); border-color: var(--border); color: var(--fg); }
+  .btn-ghost:hover:not(:disabled) { background: var(--panel-2); }
+  .btn-danger { background: transparent; border-color: #5A2633; color: var(--red); }
+  .btn-danger:hover:not(:disabled) { background: #2A1520; }
+  .btn-stop { background: transparent; border-color: var(--border); color: var(--amber); }
+
+  /* ===== 兼容性横幅 ===== */
+  .banner {
+    display: none; align-items: flex-start; gap: 10px;
+    background: #2B1D0E; border: 1px solid #5C4419; color: #F3D9A4;
+    border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; font-size: 13px;
+  }
+  .banner.show { display: flex; }
+  .banner svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ===== 标签页 ===== */
+  nav.tabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--border);
+    margin-bottom: 16px; padding: 0 2px;
+  }
+  nav.tabs button {
+    font-family: var(--sans); font-size: 13.5px; color: var(--fg-dim);
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 16px; margin-bottom: -1px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  nav.tabs button svg { width: 15px; height: 15px; }
+  nav.tabs button.active { color: var(--fg); border-bottom-color: var(--teal); }
+  nav.tabs button:hover:not(.active) { color: var(--fg); }
+
+  /* ===== 主区 ===== */
+  .layout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; align-items: start; }
+
+  .view { display: none; flex-direction: column; gap: 12px; }
+  .view.active { display: flex; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border-soft);
+  }
+  .card-head h2 { font-size: 14.5px; font-weight: 600; }
+  .card-head .meta { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--fg-dim); }
+
+  /* 扫描状态条 */
+  .scan-strip {
+    display: flex; align-items: center; gap: 12px; padding: 11px 16px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .scan-strip .label { font-size: 13px; color: var(--fg-dim); white-space: nowrap; }
+  .scan-strip .bar-wrap { flex: 1; height: 6px; background: var(--bg-soft); border-radius: 999px; overflow: hidden; }
+  .scan-strip .bar { height: 100%; width: 0%; background: var(--teal); border-radius: 999px; transition: width .12s linear; }
+  .scan-strip .counter { font-family: var(--mono); font-size: 12px; color: var(--fg); white-space: nowrap; }
+  .scan-strip .counter span { color: var(--teal); }
+  .scan-strip.hidden { display: none; }
+
+  /* 空状态 */
+  .empty-state {
+    display: grid; place-items: center; text-align: center;
+    padding: 56px 20px; color: var(--fg-faint); background: var(--panel);
+    border: 1px dashed var(--border); border-radius: var(--radius);
+  }
+  .empty-state svg { width: 34px; height: 34px; margin-bottom: 10px; opacity: .7; }
+  .empty-state p { font-size: 13.5px; max-width: 420px; }
+  .empty-state .hint { font-size: 12.5px; margin-top: 6px; color: var(--fg-faint); }
+
+  /* 表格 */
+  .table-wrap { max-height: 460px; overflow: auto; }
+  table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.grid th {
+    position: sticky; top: 0; background: var(--panel-2); z-index: 1;
+    text-align: left; font-weight: 600; font-size: 12px; color: var(--fg-dim);
+    padding: 9px 12px; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.grid td { padding: 7px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  table.grid tr:hover td { background: rgba(76, 141, 255, .06); }
+  table.grid tr.selected td { background: rgba(45, 212, 191, .08); }
+  td.size { font-family: var(--mono); text-align: right; white-space: nowrap; color: var(--fg); }
+  td.cat { white-space: nowrap; }
+  .cat-chip {
+    display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 999px;
+    background: var(--bg-soft); color: var(--fg-dim); border: 1px solid var(--border-soft);
+  }
+  td.path { font-family: var(--mono); font-size: 12px; color: var(--fg-dim); max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-name { font-weight: 500; }
+  .dir-name { color: var(--blue); }
+
+  /* 分页 */
+  .pager { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border-soft); }
+  .pager .info { font-size: 12px; color: var(--fg-dim); font-family: var(--mono); }
+  .pager button {
+    background: var(--panel-2); color: var(--fg); border: 1px solid var(--border);
+    font-size: 12.5px; padding: 5px 12px; border-radius: 7px; cursor: pointer;
+  }
+  .pager button:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* 操作条 */
+  .op-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
+  .op-bar .spacer { flex: 1; }
+  .op-bar .sum { font-size: 12.5px; color: var(--fg-dim); font-family: var(--mono); }
+  .op-bar .sum b { color: var(--amber); }
+
+  /* 右侧面板 */
+  .side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; }
+  .gauge-card { padding: 18px 16px 14px; }
+  .gauge-card .gauge-title { font-size: 12.5px; color: var(--fg-dim); margin-bottom: 4px; }
+  .gauge-wrap { position: relative; width: 100%; display: grid; place-items: center; }
+  .gauge-center { position: absolute; text-align: center; pointer-events: none; }
+  .gauge-center .num { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--fg); letter-spacing: .5px; }
+  .gauge-center .cap { font-size: 11.5px; color: var(--fg-dim); margin-top: 2px; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .stat { background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: 8px; padding: 9px 10px; }
+  .stat .k { font-size: 11px; color: var(--fg-faint); }
+  .stat .v { font-family: var(--mono); font-size: 15px; font-weight: 600; margin-top: 2px; }
+  .stat .v.teal { color: var(--teal); }
+  .stat .v.amber { color: var(--amber); }
+  .stat .v.blue { color: var(--blue); }
+
+  .chart-card { padding: 12px 12px 8px; }
+  .chart-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .chart-card .cap { font-size: 11.5px; color: var(--fg-faint); margin-bottom: 8px; }
+  .chart { width: 100%; height: 220px; }
+
+  .note {
+    font-size: 12px; color: var(--fg-faint); line-height: 1.6;
+    padding: 12px 14px; background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: 8px;
+  }
+  .note b { color: var(--amber); font-weight: 600; }
+
+  /* 设置视图 */
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .rule-editor { padding: 6px 0; }
+  .rule-list { max-height: 300px; overflow: auto; padding: 4px 12px; }
+  .rule-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 4px;
+    border-bottom: 1px solid var(--border-soft); font-family: var(--mono); font-size: 12.5px;
+  }
+  .rule-row .tag { color: var(--fg-dim); }
+  .rule-row .rm {
+    margin-left: auto; background: none; border: none; color: var(--fg-faint); cursor: pointer; padding: 2px;
+  }
+  .rule-row .rm:hover { color: var(--red); }
+  .rule-add { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border-soft); }
+  .rule-add input {
+    flex: 1; background: var(--bg-soft); border: 1px solid var(--border); color: var(--fg);
+    font-family: var(--mono); font-size: 12.5px; padding: 7px 10px; border-radius: 7px;
+  }
+  .rule-add input:focus { outline: none; border-color: var(--teal); }
+  .hint-text { font-size: 12px; color: var(--fg-faint); padding: 0 14px 8px; line-height: 1.7; }
+
+  /* 日志视图 */
+  .log-list { max-height: 520px; overflow: auto; padding: 8px 0; }
+  .log-row {
+    display: flex; gap: 10px; padding: 6px 16px; font-family: var(--mono); font-size: 12px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .log-row .t { color: var(--fg-faint); white-space: nowrap; }
+  .log-row .msg { color: var(--fg-dim); word-break: break-all; }
+  .log-row.ok .msg { color: var(--green); }
+  .log-row.warn .msg { color: var(--amber); }
+  .log-row.err .msg { color: var(--red); }
+  .log-row.info .msg { color: var(--fg-dim); }
+
+  /* 弹窗 */
+  dialog {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 14px; padding: 0; width: 460px; max-width: 92vw;
+    box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  }
+  dialog::backdrop { background: rgba(5, 10, 20, .7); backdrop-filter: blur(2px); }
+  .modal-body { padding: 20px 22px 16px; }
+  .modal-body h3 { font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .modal-body h3 svg { width: 18px; height: 18px; color: var(--red); }
+  .modal-body p { font-size: 13.5px; color: var(--fg-dim); line-height: 1.7; }
+  .modal-body .danger-list { max-height: 180px; overflow: auto; margin: 12px 0; font-family: var(--mono); font-size: 12px; color: var(--fg); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border-soft); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #243352; border-radius: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== 顶栏 ===== -->
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v4.5l3 2"/><path d="M8.5 4.5 7 3M15.5 4.5 17 3M12 3.2V1.8"/></svg>
+      </div>
+      <div>
+        <h1>磁盘清理助手</h1>
+        <div class="sub">本地文件扫描 · 浏览器直连，无需安装</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="path-pill empty" id="pathPill">尚未选择文件夹</span>
+      <button class="btn btn-ghost" id="pickBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+        选择文件夹
+      </button>
+      <button class="btn btn-primary" id="scanBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        开始扫描
+      </button>
+      <button class="btn btn-stop" id="stopBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        停止
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== 兼容性提示 ===== -->
+  <div class="banner" id="banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.8 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg>
+    <div>当前浏览器不支持本地文件夹访问（File System Access API）。请使用 <b>Microsoft Edge</b> 或 <b>Google Chrome</b> 打开本页面，即可选择文件夹并执行扫描清理。</div>
+  </div>
+
+  <!-- ===== 标签页 ===== -->
+  <nav class="tabs">
+    <button data-tab="junk" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 3h5v3H3V6h5l1-3Z"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M9.5 13v4M14.5 13v4"/></svg>
+      垃圾文件
+    </button>
+    <button data-tab="big">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19h18M4 15h16M7 11h10M9 7h6M12 3v4"/></svg>
+      大文件
+    </button>
+    <button data-tab="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18"/></svg>
+      空文件夹
+    </button>
+    <button data-tab="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+      规则设置
+    </button>
+    <button data-tab="log">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 4.5v15Z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M8 7h8M8 11h6"/></svg>
+      操作日志
+    </button>
+  </nav>
+
+  <!-- ===== 扫描状态条 ===== -->
+  <div class="scan-strip hidden" id="scanStrip">
+    <span class="label" id="scanLabel">正在扫描</span>
+    <div class="bar-wrap"><div class="bar" id="scanBar"></div></div>
+    <span class="counter" id="scanCounter">已检查 <span id="scanCount">0</span> 项 · 已发现 <span id="scanFound">0</span> 项</span>
+  </div>
+
+  <!-- ===== 主区 ===== -->
+  <div class="layout">
+
+    <!-- 左侧视图 -->
+    <div>
+      <!-- 垃圾文件视图 -->
+      <section class="view active" data-view="junk">
+        <div class="card">
+          <div class="card-head">
+            <h2>垃圾文件</h2>
+            <span class="meta" id="junkMeta">按规则匹配的临时、缓存、日志、备份与转储文件</span>
+          </div>
+          <div class="empty-state" id="junkEmpty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <p>选择文件夹并点击「开始扫描」</p>
+            <p class="hint">扫描会按当前模式与规则匹配可清理文件，删除前需你逐项确认</p>
+          </div>
+          <div class="table-wrap hidden" id="junkTableWrap">
+            <table class="grid">
+              <thead><tr><th style="width:34px"></th><th>名称</th><th>类别</th><th style="text-align:right">大小</th><th>路径</th></tr></thead>
+              <tbody id="junkBody"></tbody>
+            </table>
+          </div>
+          <div class="pager hidden" id="junkPager"></div>
+          <div class="op-bar hidden" id="junkOpBar">
+            <button class="btn btn-ghost" id="junkAll">全选</button>
+            <button class="btn btn-ghost" id="junkInvert">反选</button>
+            <span class="spacer"></span>
+            <span class="sum">已选 <b id="junkSelCount">0</b> 项 · <b id="junkSelSize">0 B</b></span>
+            <button class="btn btn-danger" id="junkDel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 3h5v3H3V6h5l1-3Z"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/></svg>
+              删除选中
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 大文件视图 -->
+      <section class="view" data-view="big">
+        <div class="card">
+          <div class="card-head">
+            <h2>大文件</h2>
+            <span class="meta" id="bigMeta">阈值 <span id="bigThreshold">100</span> MB · 最多显示 <span id="bigTopN">200</span> 项</span>
+          </div>
+          <div class="scan-strip" style="margin-bottom:0" id="bigConfig">
+            <span class="label">最小大小（MB）</span>
+            <input type="number" id="bigMin" value="100" min="1" style="width:80px;background:var(--bg-soft);border:1px solid var(--border);color:var(--fg);font-family:var(--mono);padding:6px 8px;border-radius:7px">
+            <span class="label">显示数量</span>
+            <input type="number" id="bigN" value="200" min="1" max="1000" style="width:80px;background:var(--bg-soft);border:1px solid var(--border);color:var(--fg);font-family:var(--mono);padding:6px 8px;border-radius:7px">
+            <span class="spacer" style="flex:1"></span>
+            <button class="btn btn-ghost" id="bigScan">扫描大文件</button>
+          </div>
+          <div class="empty-state" id="bigEmpty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19h18M4 15h16M7 11h10M9 7h6M12 3v4"/></svg>
+            <p>大文件仅供查看，帮助你定位占用空间最多的文件</p>
+            <p class="hint">双击表格行可在资源管理器中定位文件</p>
+          </div>
+          <div class="table-wrap hidden" id="bigTableWrap">
+            <table class="grid">
+              <thead><tr><th style="text-align:right;width:90px">大小</th><th>名称</th><th>路径</th></tr></thead>
+              <tbody id="bigBody"></tbody>
+            </table>
+          </div>
+          <div class="op-bar hidden" id="bigOpBar">
+            <span class="sum">共 <b id="bigTotalCount">0</b> 个文件 · 合计 <b id="bigTotalSize">0 B</b></span>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost" id="bigCopy">复制路径列表</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 空文件夹视图 -->
+      <section class="view" data-view="empty">
+        <div class="card">
+          <div class="card-head">
+            <h2>空文件夹</h2>
+            <span class="meta">递归查找不含任何条目的目录</span>
+          </div>
+          <div class="empty-state" id="emptyEmpty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18"/></svg>
+            <p>扫描后会列出所选文件夹内的全部空目录</p>
+            <p class="hint">删除空文件夹不会影响任何文件内容</p>
+          </div>
+          <div class="table-wrap hidden" id="emptyTableWrap">
+            <table class="grid">
+              <thead><tr><th style="width:34px"></th><th>目录</th></tr></thead>
+              <tbody id="emptyBody"></tbody>
+            </table>
+          </div>
+          <div class="op-bar hidden" id="emptyOpBar">
+            <button class="btn btn-ghost" id="emptyAll">全选</button>
+            <span class="spacer"></span>
+            <span class="sum">已选 <b id="emptySelCount">0</b> 项</span>
+            <button class="btn btn-danger" id="emptyDel">删除选中空文件夹</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 规则设置视图 -->
+      <section class="view" data-view="settings">
+        <div class="settings-grid">
+          <div class="card rule-editor">
+            <div class="card-head"><h2>垃圾扩展名</h2><span class="meta">匹配文件后缀</span></div>
+            <div class="rule-list" id="extList"></div>
+            <div class="rule-add">
+              <input id="extInput" placeholder="例如 .cache 或 .tmp">
+              <button class="btn btn-ghost" id="extAdd">添加</button>
+            </div>
+            <p class="hint-text">仅匹配文件扩展名（含点号）。删除前会在确认弹窗中逐项列出，可随时取消。</p>
+          </div>
+          <div class="card rule-editor">
+            <div class="card-head"><h2>跳过目录</h2><span class="meta">扫描时忽略的文件夹名</span></div>
+            <div class="rule-list" id="skipList"></div>
+            <div class="rule-add">
+              <input id="skipInput" placeholder="例如 node_modules 或 Windows">
+              <button class="btn btn-ghost" id="skipAdd">添加</button>
+            </div>
+            <p class="hint-text">匹配目录名，命中即整棵子树不进入扫描。系统目录（如 Windows、Program Files）建议加入跳过，避免误删与超时。</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h2>当前清理规则预览</h2><span class="meta">按模式启用的匹配规则</span></div>
+          <div id="rulePreview" style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px"></div>
+        </div>
+      </section>
+
+      <!-- 日志视图 -->
+      <section class="view" data-view="log">
+        <div class="card">
+          <div class="card-head">
+            <h2>操作日志</h2>
+            <span class="meta" id="logMeta">最近记录保存在本机浏览器</span>
+          </div>
+          <div class="op-bar" style="border-top:none">
+            <button class="btn btn-ghost" id="logClear">清空日志</button>
+            <button class="btn btn-ghost" id="logCopy">复制日志</button>
+          </div>
+          <div class="log-list" id="logList"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 右侧统计面板 -->
+    <aside class="side">
+      <div class="card gauge-card">
+        <div class="gauge-title">可释放空间</div>
+        <div class="gauge-wrap">
+          <svg id="gaugeSvg" width="240" height="150" viewBox="0 0 240 150" fill="none"></svg>
+          <div class="gauge-center">
+            <div class="num" id="gaugeNum">0 B</div>
+            <div class="cap">当前扫描结果</div>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat"><div class="k">匹配文件</div><div class="v blue" id="statFiles">0</div></div>
+          <div class="stat"><div class="k">扫描耗时</div><div class="v teal" id="statTime">0 s</div></div>
+          <div class="stat"><div class="k">已删除</div><div class="v amber" id="statDeleted">0</div></div>
+        </div>
+      </div>
+      <div class="card chart-card">
+        <h3>类别构成</h3>
+        <div class="cap">当前扫描结果按文件类别划分（单位 MB）</div>
+        <div class="chart" id="chartCat"></div>
+      </div>
+      <div class="card chart-card">
+        <h3>大文件 Top 10</h3>
+        <div class="cap">当前大文件扫描结果中的前 10 名</div>
+        <div class="chart" id="chartBig"></div>
+      </div>
+      <div class="note">
+        <b>安全说明：</b>本工具只删除你选中的、且符合规则的条目，删除前会二次确认。
+        浏览器只在你主动「选择文件夹」并授权后访问该目录；建议将系统目录加入「跳过目录」。
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ===== 删除确认弹窗 ===== -->
+<dialog id="confirmDialog">
+  <div class="modal-body">
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.8 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg>
+      确认删除
+    </h3>
+    <p id="confirmText"></p>
+    <div class="danger-list" id="confirmList"></div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn btn-ghost" id="confirmCancel">取消</button>
+    <button class="btn btn-danger" id="confirmOk">确认删除</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+/* ============================================================
+   状态与常量
+   ============================================================ */
+const $ = (id) => document.getElementById(id);
+const state = {
+  dirHandle: null,
+  dirName: "",
+  mode: "standard",
+  scanning: false,
+  cancel: false,
+  results: [],        // 垃圾文件扫描结果
+  bigResults: [],     // 大文件结果
+  emptyResults: [],   // 空文件夹结果
+  selected: new Set(),
+  page: 0,
+  pageSize: 200,
+  deletedCount: 0,
+  deletedBytes: 0,
+  log: [],
+};
+
+const CATEGORIES = [
+  { key: "temp",   label: "临时文件", color: "#2DD4BF" },
+  { key: "cache",  label: "缓存文件", color: "#4C8DFF" },
+  { key: "log",    label: "日志文件", color: "#8FA3BF" },
+  { key: "backup", label: "备份文件", color: "#F5A623" },
+  { key: "dump",   label: "转储文件", color: "#F05252" },
+  { key: "other",  label: "其他",     color: "#5C6F8F" },
+];
+
+/* 规则数据：扩展名 -> 类别；深度模式下额外启用扩展名集合 */
+const DEFAULT_EXT_RULES = {
+  ".tmp": "temp", ".temp": "temp", ".~tmp": "temp", ".~": "temp", "~": "temp",
+  ".cache": "cache", ".cache2": "cache", ".thumbcache_": "cache", ".cached": "cache",
+  ".log": "log", ".old": "backup", ".bak": "backup", ".backup": "backup",
+  ".dmp": "dump", ".dump": "dump", ".mdmp": "dump",
+};
+const DEEP_ONLY_EXTS = { ".chk": "other", ".dat": "other", ".prv": "other" };
+const DEFAULT_SKIP_DIRS = ["Windows", "Program Files", "Program Files (x86)", "ProgramData",
+  "$RECYCLE.BIN", "System Volume Information", "node_modules", ".git", ".svn", "AppData"];
+
+const STORE_KEY_RULES = "diskcleaner.rules.v1";
+const STORE_KEY_LOG = "diskcleaner.log.v1";
+
+/* ============================================================
+   规则加载 / 持久化
+   ============================================================ */
+function loadRules() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY_RULES);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        extRules: parsed.extRules || DEFAULT_EXT_RULES,
+        skipDirs: parsed.skipDirs || DEFAULT_SKIP_DIRS,
+      };
+    }
+  } catch (e) { /* 使用默认值 */ }
+  return { extRules: { ...DEFAULT_EXT_RULES }, skipDirs: [...DEFAULT_SKIP_DIRS] };
+}
+const rules = loadRules();
+function saveRules() {
+  localStorage.setItem(STORE_KEY_RULES, JSON.stringify(rules));
+}
+
+function loadLog() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY_LOG);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* 忽略 */ }
+  return [];
+}
+function saveLog() {
+  try { localStorage.setItem(STORE_KEY_LOG, state.log.slice(-200)); } catch (e) { /* 忽略 */ }
+}
+function addLog(type, message) {
+  const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  state.log.push({ time, type, message });
+  if (state.log.length > 200) state.log.splice(0, state.log.length - 200);
+  saveLog();
+  if (state.log.length) renderLog();
+}
+
+/* ============================================================
+   工具函数
+   ============================================================ */
+function fmtSize(bytes) {
+  if (bytes == null || isNaN(bytes)) return "0 B";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB";
+  return (bytes / 1073741824).toFixed(2) + " GB";
+}
+function fmtCount(n) {
+  if (n >= 10000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function debounce(fn, ms) {
+  let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+/* 根据规则判定文件类别 */
+function classifyFile(name) {
+  const lower = name.toLowerCase();
+  if (lower.startsWith("thumbcache_")) return "cache";
+  if (lower === "memory.dmp") return "dump";
+  for (const [ext, cat] of Object.entries(rules.extRules)) {
+    if (ext === "~") { if (name.endsWith("~")) return cat; continue; }
+    if (ext.startsWith(".")) {
+      if (lower.endsWith(ext)) return cat;
+    }
+  }
+  if (state.mode === "deep") {
+    for (const [ext, cat] of Object.entries(DEEP_ONLY_EXTS)) {
+      if (lower.endsWith(ext)) return cat;
+    }
+  }
+  return null;
+}
+
+/* ============================================================
+   文件夹选择与权限
+   ============================================================ */
+function supported() {
+  return "showDirectoryPicker" in window;
+}
+
+async function pickDirectory() {
+  if (!supported()) return;
+  try {
+    state.dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    state.dirName = state.dirHandle.name;
+    $("pathPill").textContent = state.dirName;
+    $("pathPill").classList.remove("empty");
+    $("scanBtn").disabled = false;
+    addLog("info", "已选择文件夹：" + state.dirName);
+    renderAllEmpty();
+  } catch (e) {
+    if (e.name !== "AbortError") {
+      addLog("err", "选择文件夹失败：" + e.message);
+    }
+  }
+}
+
+/* ============================================================
+   扫描器（File System Access API）
+   ============================================================ */
+async function* walk(handle, relPath, depth) {
+  let entries;
+  try {
+    entries = await handle.entries();
+  } catch (e) {
+    return;
+  }
+  for await (const [name, child] of entries) {
+    if (state.cancel) return;
+    const path = relPath ? relPath + "/" + name : name;
+    if (child.kind === "directory") {
+      const skip = rules.skipDirs.some((d) => d.toLowerCase() === name.toLowerCase());
+      if (skip) continue;
+      yield { kind: "dir", name, path, handle: child, parent: handle };
+      yield* walk(child, path, depth + 1);
+    } else {
+      yield { kind: "file", name, path, handle: child, parent: handle };
+    }
+  }
+}
+
+/* 垃圾文件扫描 */
+async function scanJunk() {
+  state.cancel = false;
+  state.results = [];
+  state.selected.clear();
+  state.page = 0;
+  state.scanning = true;
+  $("scanBtn").disabled = true;
+  $("stopBtn").disabled = false;
+  $("scanStrip").classList.remove("hidden");
+  $("junkEmpty").classList.add("hidden");
+
+  let checked = 0, found = 0, foundSize = 0;
+  const start = performance.now();
+  addLog("info", "开始垃圾文件扫描，模式：" + state.mode);
+
+  try {
+    for await (const item of walk(state.dirHandle, "", 0)) {
+      if (state.cancel) { addLog("warn", "扫描已停止（用户中断）"); break; }
+      if (item.kind !== "file") continue;
+      checked++;
+      const cat = classifyFile(item.name);
+      if (cat) {
+        let size = 0;
+        try {
+          const f = await item.handle.getFile();
+          size = f.size;
+        } catch (e) { size = 0; }
+        state.results.push({ name: item.name, path: item.path, size, cat, parent: item.parent, handle: item.handle });
+        found++; foundSize += size;
+      }
+      if (checked % 150 === 0) updateScanStrip(checked, found, foundSize);
+    }
+  } catch (e) {
+    addLog("err", "扫描异常：" + e.message);
+  }
+
+  state.scanning = false;
+  $("scanBtn").disabled = false;
+  $("stopBtn").disabled = true;
+  $("scanStrip").classList.add("hidden");
+  const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+  updateScanStrip(checked, found, foundSize);
+
+  if (state.cancel) {
+    $("junkMeta").textContent = "扫描已停止";
+    addLog("warn", "垃圾扫描已停止");
+  } else {
+    addLog("ok", "垃圾扫描完成：发现 " + found + " 个文件，共 " + fmtSize(foundSize) + "，耗时 " + elapsed + "s");
+  }
+  renderJunk();
+  renderGauge();
+  renderCategoryChart();
+  renderStats(elapsed);
+}
+
+/* 大文件扫描 */
+async function scanBig() {
+  const min = parseInt($("bigMin").value, 10) || 100;
+  const topN = Math.min(parseInt($("bigN").value, 10) || 200, 1000);
+  $("bigThreshold").textContent = min;
+  $("bigTopN").textContent = topN;
+  state.cancel = false;
+  state.bigResults = [];
+  state.scanning = true;
+  $("scanBtn").disabled = true;
+  $("stopBtn").disabled = false;
+  $("scanStrip").classList.remove("hidden");
+  $("bigEmpty").classList.add("hidden");
+
+  let checked = 0, found = 0, foundSize = 0;
+  const minBytes = min * 1048576;
+  const start = performance.now();
+  addLog("info", "开始大文件扫描：≥" + min + " MB，路径 " + state.dirName);
+
+  try {
+    for await (const item of walk(state.dirHandle, "", 0)) {
+      if (state.cancel) { addLog("warn", "扫描已停止（用户中断）"); break; }
+      if (item.kind !== "file") continue;
+      checked++;
+      try {
+        const f = await item.handle.getFile();
+        if (f.size >= minBytes) {
+          state.bigResults.push({ name: item.name, path: item.path, size: f.size });
+          found++; foundSize += f.size;
+        }
+      } catch (e) { /* 无法读取的文件跳过 */ }
+      if (checked % 150 === 0) updateScanStrip(checked, found, foundSize);
+    }
+  } catch (e) {
+    addLog("err", "扫描异常：" + e.message);
+  }
+
+  state.bigResults.sort((a, b) => b.size - a.size);
+  state.bigResults = state.bigResults.slice(0, topN);
+  state.scanning = false;
+  $("scanBtn").disabled = false;
+  $("stopBtn").disabled = true;
+  $("scanStrip").classList.add("hidden");
+  updateScanStrip(checked, found, foundSize);
+  const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+
+  if (state.cancel) {
+    addLog("warn", "大文件扫描已停止");
+  } else {
+    addLog("ok", "大文件扫描完成：发现 " + state.bigResults.length + " 个大文件，耗时 " + elapsed + "s");
+  }
+  renderBig();
+  renderBigChart();
+}
+
+/* 空文件夹扫描 */
+async function scanEmpty() {
+  state.cancel = false;
+  state.emptyResults = [];
+  state.selected.clear();
+  state.scanning = true;
+  $("scanBtn").disabled = true;
+  $("stopBtn").disabled = false;
+  $("scanStrip").classList.remove("hidden");
+  $("emptyEmpty").classList.add("hidden");
+
+  let checked = 0, found = 0;
+  const start = performance.now();
+  addLog("info", "开始空文件夹扫描：" + state.dirName);
+
+  async function isEmptyDir(handle) {
+    try {
+      for await (const _ of handle.entries()) return false;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  try {
+    for await (const item of walk(state.dirHandle, "", 0)) {
+      if (state.cancel) { addLog("warn", "扫描已停止（用户中断）"); break; }
+      if (item.kind !== "dir") continue;
+      checked++;
+      if (await isEmptyDir(item.handle)) {
+        state.emptyResults.push({ name: item.name, path: item.path, handle: item.handle, parent: item.parent });
+        found++;
+      }
+      if (checked % 100 === 0) updateScanStrip(checked, found, 0);
+    }
+  } catch (e) {
+    addLog("err", "扫描异常：" + e.message);
+  }
+
+  state.scanning = false;
+  $("scanBtn").disabled = false;
+  $("stopBtn").disabled = true;
+  $("scanStrip").classList.add("hidden");
+  const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+  updateScanStrip(checked, found, 0);
+
+  if (state.cancel) {
+    addLog("warn", "空文件夹扫描已停止");
+  } else {
+    addLog("ok", "空文件夹扫描完成：发现 " + found + " 个空目录，耗时 " + elapsed + "s");
+  }
+  renderEmpty();
+  $("statTime").textContent = elapsed + " s";
+}
+
+function updateScanStrip(checked, found, foundSize) {
+  $("scanCount").textContent = fmtCount(checked);
+  $("scanFound").textContent = fmtCount(found);
+  $("scanBar").style.width = "100%";
+  $("scanLabel").textContent = state.cancel ? "正在停止" : "正在扫描";
+}
+
+/* ============================================================
+   渲染：垃圾文件表格（分页）
+   ============================================================ */
+function renderJunk() {
+  const list = state.results;
+  const total = list.length;
+  $("junkMeta").textContent = total > 0
+    ? "共 " + total + " 项 · " + fmtSize(list.reduce((s, x) => s + x.size, 0))
+    : (state.scanning ? "扫描中…" : "未发现可清理文件");
+
+  if (total === 0) {
+    $("junkEmpty").classList.remove("hidden");
+    $("junkTableWrap").classList.add("hidden");
+    $("junkPager").classList.add("hidden");
+    $("junkOpBar").classList.add("hidden");
+    return;
+  }
+  $("junkEmpty").classList.add("hidden");
+  $("junkTableWrap").classList.remove("hidden");
+  $("junkPager").classList.remove("hidden");
+  $("junkOpBar").classList.remove("hidden");
+
+  const pages = Math.ceil(total / state.pageSize);
+  if (state.page >= pages) state.page = pages - 1;
+  const start = state.page * state.pageSize;
+  const slice = list.slice(start, start + state.pageSize);
+
+  const rows = slice.map((item, i) => {
+    const absIdx = start + i;
+    const cat = CATEGORIES.find((c) => c.key === item.cat) || CATEGORIES[5];
+    const checked = state.selected.has(absIdx) ? "checked" : "";
+    return "<tr class='" + (checked ? "selected" : "") + "' data-i='" + absIdx + "'>"
+      + "<td><input type='checkbox' data-idx='" + absIdx + "' " + checked + "></td>"
+      + "<td class='file-name'>" + escapeHtml(item.name) + "</td>"
+      + "<td class='cat'><span class='cat-chip' style='color:" + cat.color + "'>" + cat.label + "</span></td>"
+      + "<td class='size'>" + fmtSize(item.size) + "</td>"
+      + "<td class='path' title='" + escapeHtml(item.path) + "'>" + escapeHtml(item.path) + "</td>"
+      + "</tr>";
+  }).join("");
+  $("junkBody").innerHTML = rows;
+
+  renderPager("junkPager", pages, total);
+  renderSelectionSummary();
+}
+
+function renderPager(elId, pages, total) {
+  const el = $(elId);
+  if (pages <= 1) {
+    el.innerHTML = "<span class='info'>共 " + total + " 项</span>";
+    return;
+  }
+  el.innerHTML =
+    "<button data-page='" + (state.page - 1) + "'" + (state.page === 0 ? " disabled" : "") + ">上一页</button>"
+    + "<span class='info'>第 " + (state.page + 1) + " / " + pages + " 页 · 共 " + total + " 项</span>"
+    + "<button data-page='" + (state.page + 1) + "'" + (state.page >= pages - 1 ? " disabled" : "") + ">下一页</button>";
+}
+
+function renderSelectionSummary() {
+  let count = 0, size = 0;
+  state.selected.forEach((i) => {
+    const item = state.results[i];
+    if (item) { count++; size += item.size; }
+  });
+  $("junkSelCount").textContent = count;
+  $("junkSelSize").textContent = fmtSize(size);
+}
+
+/* 渲染：大文件 */
+function renderBig() {
+  const list = state.bigResults;
+  const total = list.length;
+  if (total === 0) {
+    $("bigEmpty").classList.remove("hidden");
+    $("bigTableWrap").classList.add("hidden");
+    $("bigOpBar").classList.add("hidden");
+    return;
+  }
+  $("bigEmpty").classList.add("hidden");
+  $("bigTableWrap").classList.remove("hidden");
+  $("bigOpBar").classList.remove("hidden");
+  $("bigTotalCount").textContent = total;
+  $("bigTotalSize").textContent = fmtSize(list.reduce((s, x) => s + x.size, 0));
+
+  const rows = list.map((item) =>
+    "<tr data-path='" + escapeHtml(item.path) + "'>"
+    + "<td class='size'>" + fmtSize(item.size) + "</td>"
+    + "<td class='file-name'>" + escapeHtml(item.name) + "</td>"
+    + "<td class='path' title='" + escapeHtml(item.path) + "'>" + escapeHtml(item.path) + "</td>"
+    + "</tr>"
+  ).join("");
+  $("bigBody").innerHTML = rows;
+}
+
+/* 渲染：空文件夹 */
+function renderEmpty() {
+  const list = state.emptyResults;
+  const total = list.length;
+  if (total === 0) {
+    $("emptyEmpty").classList.remove("hidden");
+    $("emptyTableWrap").classList.add("hidden");
+    $("emptyOpBar").classList.add("hidden");
+    return;
+  }
+  $("emptyEmpty").classList.add("hidden");
+  $("emptyTableWrap").classList.remove("hidden");
+  $("emptyOpBar").classList.remove("hidden");
+  $("emptySelCount").textContent = state.selected.size;
+
+  const rows = list.map((item, i) => {
+    const checked = state.selected.has(i) ? "checked" : "";
+    return "<tr class='" + (checked ? "selected" : "") + "' data-i='" + i + "'>"
+      + "<td><input type='checkbox' data-idx='" + i + "' " + checked + "></td>"
+      + "<td class='dir-name'>" + escapeHtml(item.path) + "</td>"
+      + "</tr>";
+  }).join("");
+  $("emptyBody").innerHTML = rows;
+}
+
+/* 渲染：右侧仪表与统计 */
+function renderGauge() {
+  const total = state.results.reduce((s, x) => s + x.size, 0);
+  $("gaugeNum").textContent = fmtSize(total);
+  renderGaugeArc(total);
+}
+
+function renderGaugeArc(total) {
+  const svg = $("gaugeSvg");
+  const cx = 120, cy = 120, r = 100;
+  const arc = 220; // 张开角度（度）
+  const startAngle = 180 + (360 - arc) / 2;
+  let parts = "";
+  let acc = 0;
+
+  function polar(cx, cy, r, deg) {
+    const rad = (deg - 90) * Math.PI / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  }
+  function arcPath(cx, cy, r, a0, a1) {
+    const [x0, y0] = polar(cx, cy, r, a0);
+    const [x1, y1] = polar(cx, cy, r, a1);
+    const large = (a1 - a0) > 180 ? 1 : 0;
+    return "M" + x0.toFixed(2) + " " + y0.toFixed(2) + " A" + r + " " + r + " 0 " + large + " 1 " + x1.toFixed(2) + " " + y1.toFixed(2);
+  }
+
+  if (total <= 0) {
+    parts = "<path d='" + arcPath(cx, cy, r, startAngle, startAngle + arc) + "' stroke='#223152' stroke-width='16' fill='none' stroke-linecap='round'/>";
+  } else {
+    // 背景轨道
+    parts = "<path d='" + arcPath(cx, cy, r, startAngle, startAngle + arc) + "' stroke='#1A2744' stroke-width='16' fill='none' stroke-linecap='round'/>";
+    // 按类别分段
+    const cats = CATEGORIES.filter((c) => {
+      const size = state.results.filter((x) => x.cat === c.key).reduce((s, x) => s + x.size, 0);
+      return size > 0;
+    });
+    cats.forEach((c) => {
+      const size = state.results.filter((x) => x.cat === c.key).reduce((s, x) => s + x.size, 0);
+      const a0 = startAngle + arc * (acc / total);
+      acc += size;
+      const a1 = startAngle + arc * (acc / total);
+      parts += "<path d='" + arcPath(cx, cy, r, a0, a1) + "' stroke='" + c.color + "' stroke-width='16' fill='none' stroke-linecap='butt'/>";
+    });
+  }
+  svg.innerHTML = parts;
+}
+
+function renderStats(elapsed) {
+  $("statFiles").textContent = fmtCount(state.results.length);
+  $("statTime").textContent = elapsed + " s";
+  $("statDeleted").textContent = fmtCount(state.deletedCount);
+}
+
+function renderAllEmpty() {
+  // 切换文件夹后重置各视图为空态
+  state.results = []; state.bigResults = []; state.emptyResults = []; state.selected.clear(); state.page = 0;
+  $("junkBody").innerHTML = ""; $("bigBody").innerHTML = ""; $("emptyBody").innerHTML = "";
+  $("junkEmpty").classList.remove("hidden"); $("bigEmpty").classList.remove("hidden"); $("emptyEmpty").classList.remove("hidden");
+  $("junkTableWrap").classList.add("hidden"); $("bigTableWrap").classList.add("hidden"); $("emptyTableWrap").classList.add("hidden");
+  $("junkPager").classList.add("hidden"); $("junkOpBar").classList.add("hidden"); $("bigOpBar").classList.add("hidden"); $("emptyOpBar").classList.add("hidden");
+  $("gaugeNum").textContent = "0 B";
+  renderGaugeArc(0);
+  renderCategoryChart();
+  renderBigChart();
+}
+
+/* ============================================================
+   图表（ECharts；CDN 不可用时自动降级为无图表）
+   ============================================================ */
+const HAS_ECHARTS = typeof echarts !== "undefined";
+const chartCat = HAS_ECHARTS ? echarts.init($("chartCat")) : null;
+const chartBig = HAS_ECHARTS ? echarts.init($("chartBig")) : null;
+if (HAS_ECHARTS) {
+  new ResizeObserver(() => chartCat.resize()).observe($("chartCat"));
+  new ResizeObserver(() => chartBig.resize()).observe($("chartBig"));
+}
+
+function renderCategoryChart() {
+  if (!HAS_ECHARTS) return;
+  const byCat = {};
+  state.results.forEach((x) => { byCat[x.cat] = (byCat[x.cat] || 0) + x.size; });
+  const data = CATEGORIES
+    .map((c) => ({ name: c.label, value: Math.round((byCat[c.key] || 0) / 1048576 * 100) / 100, color: c.color }))
+    .filter((d) => d.value > 0);
+  if (data.length === 0) {
+    chartCat.setOption({
+      backgroundColor: "transparent",
+      title: { text: "暂无数据", left: "center", top: "middle", textStyle: { color: "#5C6F8F", fontSize: 13, fontWeight: 400 } },
+      xAxis: { show: false }, yAxis: { show: false }, series: [],
+    });
+    return;
+  }
+  const total = data.reduce((s, d) => s + d.value, 0);
+  chartCat.setOption({
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "axis", axisPointer: { type: "shadow" }, confine: true,
+      formatter: (params) => {
+        const d = data[params[0].dataIndex];
+        return d.name + "<br><b style='color:#E6EDF7'>" + d.value + " MB</b>（" + (d.value / total * 100).toFixed(1) + "%）";
+      },
+    },
+    grid: { left: 8, right: 12, top: 6, bottom: 0, containLabel: true },
+    xAxis: { type: "value", axisLabel: { color: "#5C6F8F", fontSize: 10 }, splitLine: { lineStyle: { color: "#1A2744" } } },
+    yAxis: {
+      type: "category", data: data.map((d) => d.name),
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: { color: "#8FA3BF", fontSize: 11 },
+    },
+    series: [{
+      type: "bar", data: data.map((d) => d.value), barWidth: 14,
+      itemStyle: { color: (p) => data[p.dataIndex].color, borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: "right", color: "#8FA3BF", fontSize: 10, formatter: (p) => p.value + " MB" },
+    }],
+  });
+}
+
+function renderBigChart() {
+  if (!HAS_ECHARTS) return;
+  const list = state.bigResults.slice(0, 10).map((x) => ({ name: x.name, value: Math.round(x.size / 1048576 * 10) / 10 })).reverse();
+  if (list.length === 0) {
+    chartBig.setOption({
+      backgroundColor: "transparent",
+      title: { text: "暂无数据", left: "center", top: "middle", textStyle: { color: "#5C6F8F", fontSize: 13, fontWeight: 400 } },
+      xAxis: { show: false }, yAxis: { show: false }, series: [],
+    });
+    return;
+  }
+  chartBig.setOption({
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, confine: true, formatter: (p) => p[0].name + "<br><b style='color:#E6EDF7'>" + p[0].value + " MB</b>" },
+    grid: { left: 8, right: 46, top: 6, bottom: 0, containLabel: true },
+    xAxis: { type: "value", axisLabel: { color: "#5C6F8F", fontSize: 10 }, splitLine: { lineStyle: { color: "#1A2744" } } },
+    yAxis: {
+      type: "category", data: list.map((d) => d.name.length > 22 ? d.name.slice(0, 22) + "…" : d.name),
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#8FA3BF", fontSize: 10 },
+    },
+    series: [{
+      type: "bar", data: list.map((d) => d.value), barWidth: 12,
+      itemStyle: { color: "#4C8DFF", borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: "right", color: "#8FA3BF", fontSize: 10, formatter: (p) => p.value + " MB" },
+    }],
+  });
+}
+
+/* ============================================================
+   删除操作
+   ============================================================ */
+let pendingDelete = null;
+
+function openConfirm(kind) {
+  const dialog = $("confirmDialog");
+  const listEl = $("confirmList");
+  const textEl = $("confirmText");
+
+  if (kind === "junk") {
+    const items = [];
+    state.selected.forEach((i) => { const x = state.results[i]; if (x) items.push(x); });
+    if (items.length === 0) { addLog("warn", "未选择任何文件"); return; }
+    const total = items.reduce((s, x) => s + x.size, 0);
+    textEl.innerHTML = "即将删除 <b>" + items.length + "</b> 个文件，共 <b>" + fmtSize(total) + "</b>。此操作不可撤销，请确认：";
+    listEl.innerHTML = items.slice(0, 60).map((x) => "<div>" + escapeHtml(x.path) + " · " + fmtSize(x.size) + "</div>").join("")
+      + (items.length > 60 ? "<div>…等 " + items.length + " 项</div>" : "");
+    pendingDelete = { kind: "junk", items };
+  } else if (kind === "empty") {
+    const items = state.emptyResults.filter((_, i) => state.selected.has(i));
+    if (items.length === 0) { addLog("warn", "未选择任何空文件夹"); return; }
+    textEl.innerHTML = "即将删除 <b>" + items.length + "</b> 个空文件夹。此操作不可撤销，请确认：";
+    listEl.innerHTML = items.slice(0, 60).map((x) => "<div>" + escapeHtml(x.path) + "</div>").join("")
+      + (items.length > 60 ? "<div>…等 " + items.length + " 项</div>" : "");
+    pendingDelete = { kind: "empty", items };
+  }
+  if (!pendingDelete) return;
+  dialog.showModal();
+}
+
+async function doDelete() {
+  if (!pendingDelete) return;
+  const { kind, items } = pendingDelete;
+  pendingDelete = null;
+  $("confirmDialog").close();
+
+  let ok = 0, fail = 0;
+  addLog("info", "开始删除：" + items.length + " 项");
+  $("scanStrip").classList.remove("hidden");
+  $("scanLabel").textContent = "正在删除";
+  let done = 0;
+
+  for (const item of items) {
+    try {
+      await item.parent.removeEntry(item.name, { recursive: true });
+      ok++;
+      state.deletedCount++;
+      state.deletedBytes += (item.size || 0);
+    } catch (e) {
+      fail++;
+      addLog("err", "删除失败：" + item.path + "（" + e.message + "）");
+    }
+    done++;
+    $("scanCount").textContent = done;
+    $("scanFound").textContent = items.length;
+  }
+  $("scanStrip").classList.add("hidden");
+  addLog("ok", "删除完成：成功 " + ok + " 项，失败 " + fail + " 项");
+
+  // 从结果中移除已删除项并重渲染
+  if (kind === "junk") {
+    const deletedSet = new Set(items);
+    state.results = state.results.filter((x) => !deletedSet.has(x));
+    state.selected.clear();
+    renderJunk(); renderGauge(); renderCategoryChart();
+    $("statDeleted").textContent = fmtCount(state.deletedCount);
+  } else if (kind === "empty") {
+    const deletedSet = new Set(items);
+    state.emptyResults = state.emptyResults.filter((x) => !deletedSet.has(x));
+    state.selected.clear();
+    renderEmpty();
+  }
+}
+
+/* ============================================================
+   渲染：设置视图
+   ============================================================ */
+function renderRules() {
+  const extList = $("extList");
+  extList.innerHTML = Object.entries(rules.extRules).map(([ext, cat]) => {
+    const label = (CATEGORIES.find((c) => c.key === cat) || {}).label || cat;
+    return "<div class='rule-row'><span>" + escapeHtml(ext) + "</span><span class='tag'>→ " + label + "</span>"
+      + "<button class='rm' data-ext='" + escapeHtml(ext) + "' title='删除'>×</button></div>";
+  }).join("");
+
+  const skipList = $("skipList");
+  skipList.innerHTML = rules.skipDirs.map((d) =>
+    "<div class='rule-row'><span>" + escapeHtml(d) + "</span>"
+    + "<button class='rm' data-skip='" + escapeHtml(d) + "' title='删除'>×</button></div>"
+  ).join("");
+
+  // 规则预览
+  const preview = $("rulePreview");
+  const chips = [];
+  Object.entries(rules.extRules).forEach(([ext, cat]) => {
+    const c = CATEGORIES.find((x) => x.key === cat);
+    chips.push("<span class='cat-chip' style='color:" + (c ? c.color : "#8FA3BF") + "'>" + escapeHtml(ext) + "</span>");
+  });
+  if (state.mode === "deep") {
+    Object.entries(DEEP_ONLY_EXTS).forEach(([ext]) => {
+      chips.push("<span class='cat-chip' style='color:#8FA3BF;opacity:.8'>" + escapeHtml(ext) + " <span style='font-size:10px'>深度</span></span>");
+    });
+  }
+  preview.innerHTML = chips.join("") || "<span style='color:#5C6F8F'>暂无规则</span>";
+}
+
+/* ============================================================
+   渲染：日志
+   ============================================================ */
+function renderLog() {
+  const list = $("logList");
+  if (state.log.length === 0) {
+    list.innerHTML = "<div style='text-align:center;color:#5C6F8F;padding:40px 0'>暂无操作记录</div>";
+    $("logMeta").textContent = "最近记录保存在本机浏览器";
+    return;
+  }
+  list.innerHTML = state.log.slice().reverse().map((l) =>
+    "<div class='log-row " + l.type + "'><span class='t'>" + l.time + "</span><span class='msg'>" + escapeHtml(l.message) + "</span></div>"
+  ).join("");
+  $("logMeta").textContent = "共 " + state.log.length + " 条记录";
+}
+
+/* ============================================================
+   事件绑定
+   ============================================================ */
+$("pickBtn").addEventListener("click", pickDirectory);
+$("scanBtn").addEventListener("click", () => {
+  if (!state.dirHandle) return;
+  switch (activeTab) {
+    case "junk": scanJunk(); break;
+    case "big": scanBig(); break;
+    case "empty": scanEmpty(); break;
+  }
+});
+$("stopBtn").addEventListener("click", () => {
+  state.cancel = true;
+  $("stopBtn").disabled = true;
+  addLog("warn", "正在停止当前操作…");
+});
+$("bigScan").addEventListener("click", () => {
+  if (state.dirHandle) scanBig(); else addLog("err", "请先选择文件夹");
+});
+
+/* 模式切换 */
+document.querySelectorAll(".mode-switch button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".mode-switch button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.mode = btn.dataset.mode;
+    addLog("info", "切换清理模式：" + (btn.textContent.trim()));
+    renderRules();
+  });
+});
+
+/* 标签页切换 */
+let activeTab = "junk";
+document.querySelectorAll("nav.tabs button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+    const view = document.querySelector('[data-view="' + activeTab + '"]');
+    if (view) view.classList.add("active");
+    // 切换视图时清空跨视图的勾选状态，避免索引串用
+    state.selected.clear();
+    if (activeTab === "junk") renderJunk();
+    if (activeTab === "big") renderBig();
+    if (activeTab === "empty") renderEmpty();
+    if (activeTab === "settings") renderRules();
+    if (activeTab === "log") renderLog();
+  });
+});
+
+/* 表格事件代理（垃圾文件） */
+$("junkBody").addEventListener("change", (e) => {
+  if (e.target.matches("input[type=checkbox]")) {
+    const i = parseInt(e.target.dataset.idx, 10);
+    if (e.target.checked) state.selected.add(i); else state.selected.delete(i);
+    const tr = e.target.closest("tr");
+    if (tr) tr.classList.toggle("selected", e.target.checked);
+    renderSelectionSummary();
+  }
+});
+$("junkBody").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr");
+  if (tr && !e.target.matches("input")) {
+    const cb = tr.querySelector("input");
+    if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change")); }
+  }
+});
+$("junkPager").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-page]");
+  if (btn && !btn.disabled) { state.page = parseInt(btn.dataset.page, 10); renderJunk(); }
+});
+$("junkAll").addEventListener("click", () => {
+  state.results.forEach((_, i) => state.selected.add(i));
+  renderJunk();
+});
+$("junkInvert").addEventListener("click", () => {
+  state.results.forEach((_, i) => {
+    if (state.selected.has(i)) state.selected.delete(i); else state.selected.add(i);
+  });
+  renderJunk();
+});
+$("junkDel").addEventListener("click", () => openConfirm("junk"));
+
+/* 表格事件（空文件夹） */
+$("emptyBody").addEventListener("change", (e) => {
+  if (e.target.matches("input[type=checkbox]")) {
+    const i = parseInt(e.target.dataset.idx, 10);
+    if (e.target.checked) state.selected.add(i); else state.selected.delete(i);
+    e.target.closest("tr").classList.toggle("selected", e.target.checked);
+    $("emptySelCount").textContent = state.selected.size;
+  }
+});
+$("emptyAll").addEventListener("click", () => {
+  state.emptyResults.forEach((_, i) => state.selected.add(i));
+  renderEmpty();
+});
+$("emptyDel").addEventListener("click", () => openConfirm("empty"));
+
+/* 大文件：双击打开资源管理器定位 */
+$("bigBody").addEventListener("dblclick", (e) => {
+  const tr = e.target.closest("tr");
+  if (!tr) return;
+  // 浏览器无法直接打开资源管理器，复制路径提示用户
+  copyText(tr.dataset.path || "");
+  addLog("info", "已复制文件路径：请手动定位");
+});
+$("bigCopy").addEventListener("click", () => {
+  const text = state.bigResults.map((x) => x.path + "\t" + fmtSize(x.size)).join("\n");
+  copyText(text);
+  addLog("info", "已复制 " + state.bigResults.length + " 条大文件路径");
+});
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); } catch (e) { /* 忽略 */ }
+  ta.remove();
+}
+
+/* 规则设置 */
+$("extAdd").addEventListener("click", () => {
+  const input = $("extInput");
+  const v = input.value.trim().toLowerCase();
+  if (!v) return;
+  if (!v.startsWith(".") && v !== "~") {
+    addLog("warn", "扩展名应以点号开头（如 .cache）");
+    input.value = ""; return;
+  }
+  rules.extRules[v] = "temp";
+  input.value = "";
+  saveRules(); renderRules();
+  addLog("info", "已添加扩展名规则：" + v);
+});
+$("extInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("extAdd").click(); });
+$("skipAdd").addEventListener("click", () => {
+  const input = $("skipInput");
+  const v = input.value.trim();
+  if (!v) return;
+  if (!rules.skipDirs.includes(v)) {
+    rules.skipDirs.push(v);
+    addLog("info", "已添加跳过目录：" + v);
+  }
+  input.value = "";
+  saveRules(); renderRules();
+});
+$("skipInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("skipAdd").click(); });
+
+$("extList").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-ext]");
+  if (btn) { delete rules.extRules[btn.dataset.ext]; saveRules(); renderRules(); addLog("info", "已移除扩展名规则：" + btn.dataset.ext); }
+});
+$("skipList").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-skip]");
+  if (btn) { rules.skipDirs = rules.skipDirs.filter((d) => d !== btn.dataset.skip); saveRules(); renderRules(); addLog("info", "已移除跳过目录：" + btn.dataset.skip); }
+});
+
+/* 日志操作 */
+$("logClear").addEventListener("click", () => {
+  state.log = []; saveLog(); renderLog();
+  addLog("info", "日志已清空");
+});
+$("logCopy").addEventListener("click", () => {
+  const text = state.log.map((l) => "[" + l.time + "] " + l.message).join("\n");
+  copyText(text);
+  addLog("info", "已复制 " + state.log.length + " 条日志");
+});
+
+/* 弹窗 */
+$("confirmCancel").addEventListener("click", () => { $("confirmDialog").close(); pendingDelete = null; });
+$("confirmOk").addEventListener("click", doDelete);
+$("confirmDialog").addEventListener("click", (e) => { if (e.target === $("confirmDialog")) { $("confirmDialog").close(); pendingDelete = null; } });
+
+/* ============================================================
+   初始化
+   ============================================================ */
+state.log = loadLog();
+if (!supported()) {
+  $("banner").classList.add("show");
+  $("pickBtn").disabled = true;
+  addLog("err", "当前浏览器不支持本地文件夹访问，请使用 Edge 或 Chrome");
+}
+renderRules();
+renderLog();
+renderGaugeArc(0);
+renderCategoryChart();
+renderBigChart();
+addLog("info", "磁盘清理助手已就绪。选择文件夹后即可开始扫描。");
+</script>
+</body>
+</html>
