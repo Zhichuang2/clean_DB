@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>计算器</title>
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    height: 100%;
+    background: #000;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+                 "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .calc {
+    width: min(390px, 100vw, 62vh);
+    height: 100%;
+    max-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0 12px 16px;
+    background: #000;
+  }
+
+  /* ---------- 显示区 ---------- */
+  .screen {
+    flex: 1;
+    min-height: 130px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    padding: 16px 10px 14px;
+    gap: 6px;
+  }
+
+  /* 小字：显示计算过程 */
+  .expression {
+    color: #A5A5A5;
+    font-size: 22px;
+    font-weight: 300;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+    min-height: 26px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity 0.2s;
+  }
+
+  /* 大字：当前数字 */
+  .result {
+    color: #fff;
+    font-size: 82px;
+    font-weight: 200;
+    letter-spacing: -2px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    transition: font-size .12s ease-out;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  /* 右上角隐形热区（三连击） */
+  .hotspot {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 92px;
+    height: 92px;
+    z-index: 5;
+  }
+
+  /* ---------- 键盘 ---------- */
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .btn {
+    aspect-ratio: 1;
+    border: none;
+    border-radius: 50%;
+    background: #333336;
+    color: #fff;
+    font-size: 34px;
+    font-weight: 400;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: filter .1s, background .15s, color .15s;
+    outline: none;
+    padding: 0;
+  }
+
+  .btn:active { filter: brightness(1.45); }
+
+  .btn.fn {
+    background: #A5A5A5;
+    color: #000;
+    font-size: 29px;
+  }
+
+  .btn.op {
+    background: #FF9F0A;
+    font-size: 42px;
+    font-weight: 300;
+  }
+
+  .btn.op.active {
+    background: #fff;
+    color: #FF9F0A;
+  }
+
+  .btn.zero {
+    grid-column: span 2;
+    aspect-ratio: auto;
+    border-radius: 999px;
+    justify-content: flex-start;
+    padding-left: 30px;
+  }
+</style>
+</head>
+<body>
+
+<div class="calc">
+  <div class="screen">
+    <div class="expression" id="expression"></div>
+    <div class="result" id="result">0</div>
+    <div class="hotspot" id="hotspot"></div>
+  </div>
+
+  <div class="pad" id="pad">
+    <button class="btn fn"  data-action="clear" id="clearBtn">AC</button>
+    <button class="btn fn"  data-action="negate">+/−</button>
+    <button class="btn fn"  data-action="percent">%</button>
+    <button class="btn op"  data-op="÷">÷</button>
+
+    <button class="btn num" data-num="7">7</button>
+    <button class="btn num" data-num="8">8</button>
+    <button class="btn num" data-num="9">9</button>
+    <button class="btn op"  data-op="×">×</button>
+
+    <button class="btn num" data-num="4">4</button>
+    <button class="btn num" data-num="5">5</button>
+    <button class="btn num" data-num="6">6</button>
+    <button class="btn op"  data-op="-">−</button>
+
+    <button class="btn num" data-num="1">1</button>
+    <button class="btn num" data-num="2">2</button>
+    <button class="btn num" data-num="3">3</button>
+    <button class="btn op"  data-op="+">+</button>
+
+    <button class="btn num zero" data-num="0">0</button>
+    <button class="btn num" data-action="decimal">.</button>
+    <button class="btn op"  data-action="equals">=</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   常规计算器状态
+   ========================================================= */
+let displayValue       = '0';
+let accumulator        = null;
+let pendingOp          = null;
+let waitingForOperand  = false;
+let justEvaluated      = false;
+let expressionValue    = '';
+
+/* =========================================================
+   魔术状态
+   phase: 0 未开始 / 1 已记录第一个数 / 2 已记录第二个数，等待蹦字 / 3 蹦字完成
+   ========================================================= */
+const magic = {
+  on: false,
+  phase: 0,
+  first: null,
+  second: null,
+  locked: false
+};
+let magicCurrentDigitIndex = -1; // -1 表示待初始化
+
+function magicReset() {
+  magic.phase  = 0;
+  magic.first  = null;
+  magic.second = null;
+  magic.locked = false;
+  magicCurrentDigitIndex = -1;
+}
+
+/* =========================================================
+   DOM
+   ========================================================= */
+const resultEl     = document.getElementById('result');
+const expressionEl = document.getElementById('expression');
+const padEl        = document.getElementById('pad');
+const hotspot      = document.getElementById('hotspot');
+const clearBtn     = document.getElementById('clearBtn');
+
+/* =========================================================
+   工具函数
+   ========================================================= */
+function numToStr(n) {
+  if (!isFinite(n)) return 'Error';
+  const r = Math.round(n * 1e9) / 1e9;
+  return String(r);
+}
+
+function formatDisplay(str) {
+  if (str === 'Error') return '错误';
+  const neg = str.startsWith('-');
+  const s = neg ? str.slice(1) : str;
+  const parts = s.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (neg ? '-' : '') + parts.join('.');
+}
+
+function currentNumber() {
+  const n = parseFloat(displayValue);
+  return isNaN(n) ? 0 : n;
+}
+
+function compute(a, op, b) {
+  switch (op) {
+    case '+': return a + b;
+    case '-': return a - b;
+    case '×': return a * b;
+    case '÷': return b === 0 ? NaN : a / b;
+  }
+  return b;
+}
+
+/* =========================================================
+   渲染
+   ========================================================= */
+function render() {
+  expressionEl.textContent = expressionValue;
+
+  const text = formatDisplay(displayValue);
+  resultEl.textContent = text;
+
+  const len  = text.length;
+  const size = Math.max(34, Math.min(82, Math.floor(340 / (len * 0.56))));
+  resultEl.style.fontSize = size + 'px';
+
+  document.querySelectorAll('.btn.op').forEach(b => {
+    const on = waitingForOperand && pendingOp !== null && b.dataset.op === pendingOp;
+    b.classList.toggle('active', on);
+  });
+
+  const dirty = displayValue !== '0' || accumulator !== null || pendingOp !== null;
+  clearBtn.textContent = dirty ? 'C' : 'AC';
+}
+
+/* =========================================================
+   按键逻辑
+   ========================================================= */
+function pressDigit(d) {
+  /* —— 魔术第三阶段：逐位蹦出目标数字 —— */
+  if (magic.on && magic.phase >= 2) {
+    if (!magic.locked) {
+      const targetStr = numToStr(2027 - (magic.first || 0) - (magic.second || 0));
+      
+      // 第一次按数字键时初始化显示
+      if (magicCurrentDigitIndex === -1) {
+        if (targetStr.startsWith('-')) {
+          displayValue = '-';
+          magicCurrentDigitIndex = 1;
+        } else {
+          displayValue = '';
+          magicCurrentDigitIndex = 0;
+        }
+      }
+      
+      if (magicCurrentDigitIndex < targetStr.length) {
+        displayValue += targetStr[magicCurrentDigitIndex];
+        magicCurrentDigitIndex++;
+      }
+
+      if (magicCurrentDigitIndex >= targetStr.length) {
+        magic.locked = true; // 蹦完了，锁定
+      }
+      
+      waitingForOperand = false;
+      justEvaluated = false;
+    }
+    return;
+  }
+
+  /* —— 常规数字输入 —— */
+  if (displayValue === 'Error' || justEvaluated || waitingForOperand) {
+    displayValue      = d;
+    waitingForOperand = false;
+    justEvaluated     = false;
+  } else if (displayValue === '0') {
+    displayValue = d;
+  } else if (displayValue.replace(/[-.,]/g, '').length < 9) {
+    displayValue += d;
+  }
+}
+
+function pressDecimal() {
+  if (magic.on && magic.phase >= 2) return;
+
+  if (waitingForOperand || justEvaluated) {
+    displayValue      = '0.';
+    waitingForOperand = false;
+    justEvaluated     = false;
+  } else if (!displayValue.includes('.')) {
+    displayValue += '.';
+  }
+}
+
+function pressOperator(op) {
+  // 魔术第三阶段：锁定，不接受其他运算
+  if (magic.on && magic.phase >= 2) return;
+
+  // —— 魔术模式记录第一个数 ——
+  if (magic.on && magic.phase === 0) {
+    magic.first = currentNumber();
+    magic.phase = 1;
+  }
+
+  // —— 常规计算 ——
+  const value = currentNumber();
+  if (accumulator === null) {
+    accumulator = value;
+  } else if (pendingOp !== null && !waitingForOperand) {
+    const r = compute(accumulator, pendingOp, value);
+    accumulator  = r;
+    displayValue = numToStr(r);
+  }
+  pendingOp          = op;
+  waitingForOperand  = true;
+  justEvaluated      = false;
+  expressionValue = numToStr(accumulator) + ' ' + op;
+}
+
+function pressEquals() {
+  /* —— 魔术第二阶段：观众按 =，记录第二个数，进入等待蹦字状态 —— */
+  if (magic.on && magic.phase === 1 && magic.second === null) {
+    magic.second = currentNumber();
+    magic.phase = 2;
+    magic.locked = false;
+    magicCurrentDigitIndex = -1; // 待初始化
+
+    // 执行常规等于逻辑，显示前两个数的和
+    if (pendingOp !== null && accumulator !== null && !waitingForOperand) {
+      const prev = accumulator;
+      const r = compute(accumulator, pendingOp, currentNumber());
+      displayValue      = numToStr(r);
+      expressionValue   = numToStr(prev) + ' ' + pendingOp + ' ' + numToStr(currentNumber()) + ' =';
+      accumulator       = null;
+      pendingOp         = null;
+      waitingForOperand = true;
+      justEvaluated     = true;
+    }
+    return; // 返回，不执行后续魔术第三阶段按等号逻辑
+  }
+
+  /* —— 魔术第三阶段：魔术师按 =，显示最终结果 2027 —— */
+  if (magic.on && magic.phase >= 2) {
+    // 如果还没蹦完就按了等号，直接补全目标数字
+    if (!magic.locked) {
+      magic.locked = true;
+      const targetStr = numToStr(2027 - (magic.first || 0) - (magic.second || 0));
+      displayValue = targetStr;
+      magicCurrentDigitIndex = targetStr.length;
+    }
+    
+    const first  = magic.first || 0;
+    const second = magic.second || 0;
+    const third  = 2027 - first - second;
+
+    displayValue = '2027';
+    // 构建表达式，优化负号显示
+    let expr = numToStr(first) + ' + ' + numToStr(second);
+    if (third < 0) {
+      expr += ' - ' + numToStr(Math.abs(third));
+    } else {
+      expr += ' + ' + numToStr(third);
+    }
+    expr += ' =';
+    expressionValue = expr;
+
+    accumulator       = null;
+    pendingOp         = null;
+    waitingForOperand = true;
+    justEvaluated     = true;
+    magicReset(); // 重置魔术状态，保持魔术开关
+    return;
+  }
+
+  /* —— 常规等于逻辑（非魔术模式） —— */
+  if (pendingOp !== null && accumulator !== null && !waitingForOperand) {
+    const prev = accumulator;
+    const r = compute(accumulator, pendingOp, currentNumber());
+    
+    displayValue      = numToStr(r);
+    expressionValue   = numToStr(prev) + ' ' + pendingOp + ' ' + numToStr(currentNumber()) + ' =';
+    
+    accumulator       = null;
+    pendingOp         = null;
+    waitingForOperand = true;
+    justEvaluated     = true;
+  }
+}
+
+function pressClear() {
+  displayValue      = '0';
+  accumulator       = null;
+  pendingOp         = null;
+  waitingForOperand = false;
+  justEvaluated     = false;
+  expressionValue   = '';
+  magicReset();
+}
+
+function pressNegate() {
+  if (magic.on && magic.phase >= 2) return;
+  if (displayValue === '0' || displayValue === 'Error') return;
+  displayValue = displayValue.startsWith('-')
+    ? displayValue.slice(1)
+    : '-' + displayValue;
+}
+
+function pressPercent() {
+  if (magic.on && magic.phase >= 2) return;
+  const v = currentNumber();
+  displayValue = numToStr(v / 100);
+}
+
+/* =========================================================
+   事件分发
+   ========================================================= */
+function handleKey(btn) {
+  const { num, op, action } = btn.dataset;
+
+  if (num !== undefined)        pressDigit(num);
+  else if (op !== undefined)    pressOperator(op);
+  else if (action === 'equals') pressEquals();
+  else if (action === 'clear')  pressClear();
+  else if (action === 'negate') pressNegate();
+  else if (action === 'percent')pressPercent();
+  else if (action === 'decimal')pressDecimal();
+
+  render();
+}
+
+padEl.addEventListener('click', e => {
+  const btn = e.target.closest('.btn');
+  if (!btn) return;
+  handleKey(btn);
+});
+
+/* =========================================================
+   右上角三连击 → 开启/关闭魔术模式（无弹窗）
+   ========================================================= */
+let tapTimes = [];
+
+hotspot.addEventListener('click', e => {
+  e.stopPropagation();
+  const now = Date.now();
+  tapTimes = tapTimes.filter(t => now - t < 800);
+  tapTimes.push(now);
+
+  if (tapTimes.length >= 3) {
+    tapTimes = [];
+    magic.on = !magic.on;
+    magicReset();
+  }
+});
+
+/* =========================================================
+   启动
+   ========================================================= */
+render();
+</script>
+</body>
+</html>
