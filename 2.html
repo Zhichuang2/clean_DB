@@ -29,63 +29,128 @@
   }
 
   .calc {
-    width: min(390px, 100vw, 62vh);
-    height: 100%;
-    max-height: 100vh;
+    width: min(420px, 100vw, 60vh);
+    height: 100vh;
+    max-height: 900px;
     display: flex;
     flex-direction: column;
-    padding: 0 8px 12px;
+    padding: 0 10px 14px;
     background: #000;
+    position: relative;
   }
 
   /* ---------- 顶部栏（时钟 / 计算器） ---------- */
   .topbar {
     display: flex;
     justify-content: space-between;
-    padding: 10px 8px 0;
-    height: 56px;
+    align-items: center;
+    padding: 18px 12px 0;
+    height: 78px;
     flex-shrink: 0;
   }
 
   .top-btn {
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
-    background: #333336;
+    background: #2C2C2E;
     color: #fff;
     border: none;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: filter .12s;
+    transition: filter .12s, transform .08s;
+    padding: 0;
   }
 
-  .top-btn:active { filter: brightness(1.4); }
+  .top-btn:hover { filter: brightness(1.2); }
+  .top-btn:active { filter: brightness(1.4); transform: scale(0.94); }
 
-  .top-btn svg { width: 22px; height: 22px; }
+  .top-btn.active { background: #FF9F0A; color: #000; }
+
+  .top-btn svg { width: 26px; height: 26px; }
+
+  /* ---------- 历史记录面板 ---------- */
+  .history-panel {
+    position: absolute;
+    top: 84px;
+    left: 12px;
+    right: 12px;
+    background: #1C1C1E;
+    border-radius: 16px;
+    padding: 16px 18px;
+    z-index: 20;
+    box-shadow: 0 12px 40px rgba(0,0,0,.6);
+    opacity: 0;
+    transform: translateY(-10px);
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .history-panel.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .history-title {
+    color: #8E8E93;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .history-empty {
+    color: #48484A;
+    font-size: 15px;
+    text-align: center;
+    padding: 12px 0;
+  }
+
+  .history-item {
+    color: #fff;
+    font-size: 18px;
+    font-weight: 300;
+    text-align: right;
+    padding: 6px 0;
+    border-bottom: 1px solid #2C2C2E;
+  }
+
+  .history-item:last-child { border-bottom: none; }
+
+  .history-item .hi-expr {
+    color: #8E8E93;
+    font-size: 13px;
+    display: block;
+    margin-bottom: 2px;
+  }
 
   /* ---------- 显示区 ---------- */
   .screen {
     flex: 1;
-    min-height: 120px;
+    min-height: 100px;
     position: relative;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
     align-items: flex-end;
-    padding: 12px 8px 14px;
-    gap: 4px;
+    padding: 12px 10px 22px;
+    gap: 6px;
   }
 
   /* 小字：计算过程 */
   .expression {
-    color: #A5A5A5;
-    font-size: 22px;
+    color: #8E8E93;
+    font-size: 23px;
     font-weight: 300;
     letter-spacing: -0.3px;
     line-height: 1.2;
-    min-height: 26px;
+    min-height: 27px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -96,7 +161,7 @@
     color: #fff;
     font-size: 90px;
     font-weight: 200;
-    letter-spacing: -2px;
+    letter-spacing: -2.5px;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     transition: font-size .12s ease-out;
@@ -109,8 +174,8 @@
     position: absolute;
     top: 0;
     right: 0;
-    width: 80px;
-    height: 80px;
+    width: 78px;
+    height: 78px;
     z-index: 5;
   }
 
@@ -118,7 +183,7 @@
   .pad {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+    gap: 11px;
     flex-shrink: 0;
   }
 
@@ -128,30 +193,30 @@
     border-radius: 50%;
     background: #333336;
     color: #fff;
-    font-size: 34px;
+    font-size: 35px;
     font-weight: 400;
     font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: filter .1s, background .15s, color .15s;
+    transition: filter .1s, background .15s, color .15s, transform .08s;
     outline: none;
     padding: 0;
   }
 
-  .btn:active { filter: brightness(1.4); }
+  .btn:active { filter: brightness(1.4); transform: scale(0.96); }
 
   .btn.fn {
     background: #A5A5A5;
     color: #000;
-    font-size: 30px;
+    font-size: 31px;
     font-weight: 400;
   }
 
   .btn.op {
     background: #FF9F0A;
-    font-size: 42px;
+    font-size: 43px;
     font-weight: 300;
   }
 
@@ -174,7 +239,7 @@
         <polyline points="12 7 12 12 15.5 14.5"></polyline>
       </svg>
     </button>
-    <button class="top-btn" id="calcBtn" aria-label="计算器">
+    <button class="top-btn active" id="calcBtn" aria-label="计算器">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
            stroke-linecap="round" stroke-linejoin="round">
         <rect x="5" y="2.5" width="14" height="19" rx="2.5"></rect>
@@ -192,6 +257,13 @@
     </button>
   </div>
 
+  <div class="history-panel" id="historyPanel">
+    <div class="history-title">历史记录</div>
+    <div class="history-list" id="historyList">
+      <div class="history-empty">暂无记录</div>
+    </div>
+  </div>
+
   <div class="screen">
     <div class="expression" id="expression"></div>
     <div class="result" id="result">0</div>
@@ -199,7 +271,7 @@
   </div>
 
   <div class="pad" id="pad">
-    <button class="btn fn" data-action="backspace" id="backspaceBtn" aria-label="退格">
+    <button class="btn fn" data-action="backspace" aria-label="退格">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
            stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
@@ -245,8 +317,29 @@ let justEvaluated     = false;
 let expressionValue   = '';
 
 /* =========================================================
+   历史记录
+   ========================================================= */
+const history = [];  // [{expr: '123+456', result: '579'}]
+
+function pushHistory(expr, res) {
+  history.unshift({ expr, result: res });
+  if (history.length > 20) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (history.length === 0) {
+    list.innerHTML = '<div class="history-empty">暂无记录</div>';
+    return;
+  }
+  list.innerHTML = history.map(h =>
+    `<div class="history-item"><span class="hi-expr">${h.expr}</span>${h.result}</div>`
+  ).join('');
+}
+
+/* =========================================================
    魔术状态
-   phase: 0 未开始 / 1 已记录第一个数 / 2 已记录第二个数，等待蹦字 / 3 蹦字完成
    ========================================================= */
 const magic = {
   on: false,
@@ -273,6 +366,9 @@ const expressionEl = document.getElementById('expression');
 const padEl        = document.getElementById('pad');
 const hotspot      = document.getElementById('hotspot');
 const clearBtn     = document.getElementById('clearBtn');
+const clockBtn     = document.getElementById('clockBtn');
+const calcBtn      = document.getElementById('calcBtn');
+const historyPanel = document.getElementById('historyPanel');
 
 /* =========================================================
    工具函数
@@ -283,7 +379,6 @@ function numToStr(n) {
   return String(r);
 }
 
-/* 数字 → 带千位分隔符的显示串（与原版一致） */
 function formatDisplay(str) {
   if (str === 'Error') return '错误';
   const neg = str.startsWith('-');
@@ -318,7 +413,7 @@ function render() {
   resultEl.textContent = text;
 
   const len = text.length;
-  const size = Math.max(34, Math.min(90, Math.floor(340 / (len * 0.55))));
+  const size = Math.max(36, Math.min(90, Math.floor(340 / (len * 0.55))));
   resultEl.style.fontSize = size + 'px';
 
   document.querySelectorAll('.btn.op').forEach(b => {
@@ -391,13 +486,11 @@ function pressDecimal() {
 function pressOperator(op) {
   if (magic.on && magic.phase >= 2) return;
 
-  /* —— 魔术模式记录第一个数 —— */
   if (magic.on && magic.phase === 0) {
     magic.first = currentNumber();
     magic.phase = 1;
   }
 
-  /* —— 常规计算 —— */
   const value = currentNumber();
   if (accumulator === null) {
     accumulator = value;
@@ -410,12 +503,11 @@ function pressOperator(op) {
   waitingForOperand  = true;
   justEvaluated      = false;
 
-  /* 小字：数字带逗号、运算符紧贴、无空格 */
   expressionValue = formatDisplay(numToStr(accumulator)) + op;
 }
 
 function pressEquals() {
-  /* —— 魔术第二阶段：观众按 =，记录第二个数，进入等待蹦字 —— */
+  /* —— 魔术第二阶段：观众按 =，记录第二个数 —— */
   if (magic.on && magic.phase === 1 && magic.second === null) {
     magic.second = currentNumber();
     magic.phase = 2;
@@ -430,6 +522,8 @@ function pressEquals() {
       displayValue    = numToStr(r);
       expressionValue = formatDisplay(numToStr(prev)) + pendingOp + formatDisplay(numToStr(cur));
 
+      pushHistory(expressionValue, formatDisplay(numToStr(r)));
+
       accumulator       = null;
       pendingOp         = null;
       waitingForOperand = true;
@@ -438,7 +532,7 @@ function pressEquals() {
     return;
   }
 
-  /* —— 魔术第三阶段：魔术师按 =，显示最终 2027 —— */
+  /* —— 魔术第三阶段：显示最终 2027 —— */
   if (magic.on && magic.phase >= 2) {
     if (!magic.locked) {
       magic.locked = true;
@@ -453,7 +547,6 @@ function pressEquals() {
 
     displayValue = '2027';
 
-    /* 小字：如 965+5,632-4,570（负数用减号） */
     let expr = formatDisplay(numToStr(first)) + '+' + formatDisplay(numToStr(second));
     if (third < 0) {
       expr += '-' + formatDisplay(numToStr(Math.abs(third)));
@@ -461,6 +554,8 @@ function pressEquals() {
       expr += '+' + formatDisplay(numToStr(third));
     }
     expressionValue = expr;
+
+    pushHistory(expressionValue, '2,027');
 
     accumulator       = null;
     pendingOp         = null;
@@ -478,6 +573,8 @@ function pressEquals() {
 
     displayValue    = numToStr(r);
     expressionValue = formatDisplay(numToStr(prev)) + pendingOp + formatDisplay(numToStr(cur));
+
+    pushHistory(expressionValue, formatDisplay(numToStr(r)));
 
     accumulator       = null;
     pendingOp         = null;
@@ -511,7 +608,6 @@ function pressPercent() {
 }
 
 function pressBackspace() {
-  /* 魔术第三阶段禁用退格，避免破坏流程 */
   if (magic.on && magic.phase >= 2) return;
 
   if (waitingForOperand || justEvaluated || displayValue === 'Error') {
@@ -550,6 +646,27 @@ padEl.addEventListener('click', e => {
 });
 
 /* =========================================================
+   顶部栏按钮
+   ========================================================= */
+clockBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  historyPanel.classList.toggle('show');
+});
+
+calcBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  // 仅作视觉反馈，切换高亮状态
+  calcBtn.classList.toggle('active');
+});
+
+/* 点击其他地方关闭历史记录面板 */
+document.addEventListener('click', e => {
+  if (!historyPanel.contains(e.target) && e.target !== clockBtn && !clockBtn.contains(e.target)) {
+    historyPanel.classList.remove('show');
+  }
+});
+
+/* =========================================================
    右上角三连击 → 开启/关闭魔术模式（无弹窗）
    ========================================================= */
 let tapTimes = [];
@@ -571,6 +688,7 @@ hotspot.addEventListener('click', e => {
    启动
    ========================================================= */
 render();
+renderHistory();
 </script>
 </body>
 </html>
