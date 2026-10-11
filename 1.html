@@ -199,7 +199,7 @@ const magic = {
   second: null,
   locked: false
 };
-let magicCurrentDigitIndex = -1; // -1 表示待初始化
+let magicCurrentDigitIndex = -1;
 
 function magicReset() {
   magic.phase  = 0;
@@ -227,6 +227,7 @@ function numToStr(n) {
   return String(r);
 }
 
+/* 给数字加千位分隔符（表达式与显示共用） */
 function formatDisplay(str) {
   if (str === 'Error') return '错误';
   const neg = str.startsWith('-');
@@ -281,8 +282,7 @@ function pressDigit(d) {
   if (magic.on && magic.phase >= 2) {
     if (!magic.locked) {
       const targetStr = numToStr(2027 - (magic.first || 0) - (magic.second || 0));
-      
-      // 第一次按数字键时初始化显示
+
       if (magicCurrentDigitIndex === -1) {
         if (targetStr.startsWith('-')) {
           displayValue = '-';
@@ -292,16 +292,16 @@ function pressDigit(d) {
           magicCurrentDigitIndex = 0;
         }
       }
-      
+
       if (magicCurrentDigitIndex < targetStr.length) {
         displayValue += targetStr[magicCurrentDigitIndex];
         magicCurrentDigitIndex++;
       }
 
       if (magicCurrentDigitIndex >= targetStr.length) {
-        magic.locked = true; // 蹦完了，锁定
+        magic.locked = true;
       }
-      
+
       waitingForOperand = false;
       justEvaluated = false;
     }
@@ -333,16 +333,15 @@ function pressDecimal() {
 }
 
 function pressOperator(op) {
-  // 魔术第三阶段：锁定，不接受其他运算
   if (magic.on && magic.phase >= 2) return;
 
-  // —— 魔术模式记录第一个数 ——
+  /* —— 魔术模式记录第一个数 —— */
   if (magic.on && magic.phase === 0) {
     magic.first = currentNumber();
     magic.phase = 1;
   }
 
-  // —— 常规计算 ——
+  /* —— 常规计算 —— */
   const value = currentNumber();
   if (accumulator === null) {
     accumulator = value;
@@ -354,72 +353,76 @@ function pressOperator(op) {
   pendingOp          = op;
   waitingForOperand  = true;
   justEvaluated      = false;
-  expressionValue = numToStr(accumulator) + ' ' + op;
+
+  /* 表达式：数字带逗号，运算符紧贴数字，无空格 */
+  expressionValue = formatDisplay(numToStr(accumulator)) + op;
 }
 
 function pressEquals() {
-  /* —— 魔术第二阶段：观众按 =，记录第二个数，进入等待蹦字状态 —— */
+  /* —— 魔术第二阶段：观众按 =，记录第二个数，进入等待蹦字 —— */
   if (magic.on && magic.phase === 1 && magic.second === null) {
     magic.second = currentNumber();
     magic.phase = 2;
     magic.locked = false;
-    magicCurrentDigitIndex = -1; // 待初始化
+    magicCurrentDigitIndex = -1;
 
-    // 执行常规等于逻辑，显示前两个数的和
     if (pendingOp !== null && accumulator !== null && !waitingForOperand) {
       const prev = accumulator;
-      const r = compute(accumulator, pendingOp, currentNumber());
-      displayValue      = numToStr(r);
-      expressionValue   = numToStr(prev) + ' ' + pendingOp + ' ' + numToStr(currentNumber()) + ' =';
+      const cur  = currentNumber();
+      const r = compute(accumulator, pendingOp, cur);
+
+      displayValue    = numToStr(r);
+      expressionValue = formatDisplay(numToStr(prev)) + pendingOp + formatDisplay(numToStr(cur));
+
       accumulator       = null;
       pendingOp         = null;
       waitingForOperand = true;
       justEvaluated     = true;
     }
-    return; // 返回，不执行后续魔术第三阶段按等号逻辑
+    return;
   }
 
-  /* —— 魔术第三阶段：魔术师按 =，显示最终结果 2027 —— */
+  /* —— 魔术第三阶段：显示最终结果 2027 —— */
   if (magic.on && magic.phase >= 2) {
-    // 如果还没蹦完就按了等号，直接补全目标数字
     if (!magic.locked) {
       magic.locked = true;
       const targetStr = numToStr(2027 - (magic.first || 0) - (magic.second || 0));
       displayValue = targetStr;
       magicCurrentDigitIndex = targetStr.length;
     }
-    
+
     const first  = magic.first || 0;
     const second = magic.second || 0;
     const third  = 2027 - first - second;
 
     displayValue = '2027';
-    // 构建表达式，优化负号显示
-    let expr = numToStr(first) + ' + ' + numToStr(second);
+
+    /* 表达式：数字带逗号，运算符紧贴；负数用“减号+绝对值” */
+    let expr = formatDisplay(numToStr(first)) + '+' + formatDisplay(numToStr(second));
     if (third < 0) {
-      expr += ' - ' + numToStr(Math.abs(third));
+      expr += '-' + formatDisplay(numToStr(Math.abs(third)));
     } else {
-      expr += ' + ' + numToStr(third);
+      expr += '+' + formatDisplay(numToStr(third));
     }
-    expr += ' =';
     expressionValue = expr;
 
     accumulator       = null;
     pendingOp         = null;
     waitingForOperand = true;
     justEvaluated     = true;
-    magicReset(); // 重置魔术状态，保持魔术开关
+    magicReset();
     return;
   }
 
-  /* —— 常规等于逻辑（非魔术模式） —— */
+  /* —— 常规等于 —— */
   if (pendingOp !== null && accumulator !== null && !waitingForOperand) {
     const prev = accumulator;
-    const r = compute(accumulator, pendingOp, currentNumber());
-    
-    displayValue      = numToStr(r);
-    expressionValue   = numToStr(prev) + ' ' + pendingOp + ' ' + numToStr(currentNumber()) + ' =';
-    
+    const cur  = currentNumber();
+    const r = compute(accumulator, pendingOp, cur);
+
+    displayValue    = numToStr(r);
+    expressionValue = formatDisplay(numToStr(prev)) + pendingOp + formatDisplay(numToStr(cur));
+
     accumulator       = null;
     pendingOp         = null;
     waitingForOperand = true;
